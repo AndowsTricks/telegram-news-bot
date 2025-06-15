@@ -8,12 +8,10 @@ from image_handler import get_image_url
 from time import sleep
 
 # Load config
-with open("config.json") as f:
-    config = json.load(f)
-
-BOT_TOKEN = config["bot_token"]
-CHANNEL_ID = config["channel_id"]
-POST_INTERVAL = config.get("post_interval", 1800)  # Default: 30 min
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHANNEL_ID = os.getenv("CHANNEL_ID")
+POST_INTERVAL = int(os.getenv("POST_INTERVAL", "1800"))
+  # Default: 30 min
 
 # Load posted URLs
 if os.path.exists("posted.json"):
