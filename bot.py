@@ -1,65 +1,73 @@
-import feedparser
-import json
 import os
+import time
+import json
+import feedparser
 import requests
-from summarizer import summarize_article
-from translator import translate_text
-from image_handler import get_image_url
-from time import sleep
+from translator import translate_to_sinhala
 
-# Load config
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
 POST_INTERVAL = int(os.getenv("POST_INTERVAL", "1800"))
-  # Default: 30 min
+HF_TOKEN = os.getenv("HF_TOKEN")
 
-# Load posted URLs
-if os.path.exists("posted.json"):
-    with open("posted.json", "r") as f:
-        posted = set(json.load(f))
-else:
-    posted = set()
+POSTED_FILE = "posted.json"
+RSS_FEEDS_FILE = "rss_feeds.txt"
 
-# Load RSS URLs
-with open("rss_feeds.txt", "r") as f:
-    feeds = [line.strip() for line in f if line.strip()]
+def load_posted_ids():
+    if not os.path.exists(POSTED_FILE):
+        return set()
+    with open(POSTED_FILE, "r") as f:
+        return set(json.load(f))
 
-print("Bot is running...\n")
+def save_posted_ids(posted_ids):
+    with open(POSTED_FILE, "w") as f:
+        json.dump(list(posted_ids), f)
 
-while True:
-    for url in feeds:
-        feed = feedparser.parse(url)
-        for entry in feed.entries:
-            link = entry.link
-            if link in posted:
-                continue
+def get_summary(text):
+    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+    payload = {"inputs": text[:1024]}
+    response = requests.post(
+        "https://api-inference.huggingface.co/models/facebook/bart-large-cnn",
+        headers=headers,
+        json=payload
+    )
+    try:
+        return response.json()[0]["summary_text"]
+    except Exception:
+        return text[:300]
 
-            title = entry.title
-            summary = summarize_article(link)
-            summary_si = translate_text(summary)
-            image_url = get_image_url(link)
+def post_to_telegram(text):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": CHANNEL_ID,
+        "text": text,
+        "parse_mode": "HTML"
+    }
+    requests.post(url, data=payload)
 
-            caption = f"\u2728 {title}\n\n{summary_si}\n\n\ud83d\udd17 {link}"
-            send_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
+def main():
+    posted_ids = load_posted_ids()
+    while True:
+        with open(RSS_FEEDS_FILE, "r") as f:
+            feeds = f.read().splitlines()
+        for feed_url in feeds:
+            feed = feedparser.parse(feed_url)
+            for entry in feed.entries[:5]:
+                post_id = entry.get("id", entry.get("link"))
+                if post_id in posted_ids:
+                    continue
+                summary = get_summary(entry.get("summary", entry.get("description", "")))
+                sinhala = translate_to_sinhala(summary)
+                post = f"<b>{entry.title}</b>
 
-            payload = {
-                "chat_id": CHANNEL_ID,
-                "caption": caption,
-                "photo": image_url or "https://via.placeholder.com/150"
-            }
+{summary}
 
-            try:
-                res = requests.post(send_url, data=payload)
-                if res.status_code == 200:
-                    posted.add(link)
-                    with open("posted.json", "w") as f:
-                        json.dump(list(posted), f, indent=2)
-                    print(f"Posted: {title}")
-                else:
-                    print(f"Failed to post: {res.text}")
-            except Exception as e:
-                print(f"Error: {e}")
+🌐 <i>{sinhala}</i>
+🔗 {entry.link}"
+                post_to_telegram(post)
+                posted_ids.add(post_id)
+        save_posted_ids(posted_ids)
+        time.sleep(POST_INTERVAL)
 
-            sleep(10)  # avoid spamming
-    print("Sleeping before next check...")
-    sleep(POST_INTERVAL)
+if __name__ == "__main__":
+    main()

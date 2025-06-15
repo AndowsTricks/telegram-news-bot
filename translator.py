@@ -1,12 +1,17 @@
+import requests
 
-from googletrans import Translator
-
-translator = Translator()
-
-def translate_text(text, dest='si'):
+def translate_to_sinhala(text):
     try:
-        result = translator.translate(text, dest=dest)
-        return result.text
-    except Exception as e:
-        print(f"Translate error: {e}")
-        return text
+        response = requests.get(
+            "https://translate.googleapis.com/translate_a/single",
+            params={
+                "client": "gtx",
+                "sl": "en",
+                "tl": "si",
+                "dt": "t",
+                "q": text
+            }
+        )
+        return response.json()[0][0][0]
+    except:
+        return "Sinhala translation unavailable."

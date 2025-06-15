@@ -1,6 +1,2 @@
 feedparser
 requests
-beautifulsoup4
-transformers
-torch
-googletrans==4.0.0-rc1
