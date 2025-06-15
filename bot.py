@@ -31,6 +31,7 @@ def get_summary(text):
         headers=headers,
         json=payload
     )
+
     try:
         return response.json()[0]["summary_text"]
     except Exception:
